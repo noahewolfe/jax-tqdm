@@ -43,8 +43,9 @@ def scan_tqdm(
                 iter_num, *_ = x
             else:
                 iter_num = x
-            _update_progress_bar(iter_num)
             result = func(carry, x)
+            _, loss = result
+            _update_progress_bar(iter_num, loss=loss)
             return close_tqdm(result, iter_num)
 
         return wrapper_progress_bar
@@ -130,10 +131,11 @@ def build_tqdm(
         tqdm_bars[0] = tqdm(range(n), **kwargs)
         tqdm_bars[0].set_description(message, refresh=False)
 
-    def _update_tqdm(arg, transform):
+    def _update_tqdm(arg, transform, **kwargs):
         tqdm_bars[0].update(int(arg))
+        tqdm_bars[0].set_postfix(kwargs)
 
-    def _update_progress_bar(iter_num):
+    def _update_progress_bar(iter_num, **kwargs):
         "Updates tqdm from a JAX scan or loop"
         _ = jax.lax.cond(
             iter_num == 0,
@@ -145,7 +147,7 @@ def build_tqdm(
         _ = jax.lax.cond(
             # update tqdm every multiple of `print_rate` except at the end
             (iter_num % print_rate == 0) & (iter_num != n - remainder),
-            lambda _: callback(_update_tqdm, print_rate, None, ordered=True),
+            lambda _: callback(_update_tqdm, print_rate, None, ordered=True, **kwargs),
             lambda _: None,
             operand=None,
         )
@@ -153,7 +155,7 @@ def build_tqdm(
         _ = jax.lax.cond(
             # update tqdm by `remainder`
             iter_num == n - remainder,
-            lambda _: callback(_update_tqdm, remainder, None, ordered=True),
+            lambda _: callback(_update_tqdm, remainder, None, ordered=True, **kwargs),
             lambda _: None,
             operand=None,
         )
